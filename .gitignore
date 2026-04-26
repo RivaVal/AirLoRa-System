@@ -1,0 +1,16 @@
+# Arduino IDE
+*.eep *.hex *.tmp *.log *.ino.lock
+build/ libraries/ .arduino/
+*.o *.d *.map
+
+# ESP-IDF
+build/ managed_components/ sdkconfig.old
+sdkconfig.ci.* .gdbinit pytest_*
+dist/ build_logs/
+
+# ОС и IDE
+.DS_Store Thumbs.db .vscode/ .idea/ *.swp *.swo
+*.pyc __pycache__/
+
+# Секреты (никогда не коммить!)
+secrets.h config.json .env wifi_credentials.h
