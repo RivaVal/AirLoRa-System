@@ -1,0 +1,67 @@
+ls -# !/bin/bash
+echo "--   FILE:: command.create.all    --"
+# Удалить устаревшие данные
+rm -r all_files_set
+mkdir all_files_set
+ls -l
+ls -l >> ./all_files_set/files.recieve.42.all 
+
+cat   CommonTypes.h  >> ./all_files_set/files.recieve.42.all 
+cat   Config.h   >> ./all_files_set/files.recieve.42.all
+cat   GPS_Handler.h    >> ./all_files_set/files.recieve.42.all
+cat   I2C_Master.h    >> ./all_files_set/files.recieve.42.all
+echo "cat   GY87_Handler.h  >> ./all_files_set/files.recieve.42.all "
+cat   MPU9250_Handler.h  >> ./all_files_set/files.recieve.42.all
+cat   BatteryMonitor.h  >> ./all_files_set/files.recieve.42.all
+cat   FlightStabilizer.h  >> ./all_files_set/files.recieve.42.all
+
+echo " cat   SPI_Manager.h  >> ./all_files_set/files.recieve.42.all "
+cat  LoRaCommunicator.h  >> ./all_files_set/files.recieve.42.all
+cat  PCA9685_ServoController.h  >> ./all_files_set/files.recieve.42.all 
+echo " cat   utils.h  >> ./all_files_set/files.recieve.42.all "
+cat   Unified_LEDC_Controller.h  >> ./all_files_set/files.recieve.42.all
+cat   FilterManager.h  >> ./all_files_set/files.recieve.42.all
+cat   ISensorFilter.h  >> ./all_files_set/files.recieve.42.all
+cat   MadgwickFilter.h  >> ./all_files_set/files.recieve.42.all
+cat   MahonyFilter.h  >> ./all_files_set/files.recieve.42.all
+cat   VibrationEstimator.h  >> ./all_files_set/files.recieve.42.all
+cat   VibrationLogger.h  >> ./all_files_set/files.recieve.42.all
+echo " cat   SystemTests.h  >> ./all_files_set/files.recieve.42.all "
+echo "------- Файл      :./all_files_set/files.recieve.42.all ---1---создан -!----"  
+
+cat Receiver_S3_AirPlane_11_0031_apr15.ino >> ./all_files_set/files.recieve.42.all
+
+cat LoRaCommunicator.cpp  >> ./all_files_set/files.recieve.42.all 
+cat Unified_LEDC_Controller.cpp  >> ./all_files_set/files.recieve.42.all 
+cat PCA9685_ServoController.cpp  >> ./all_files_set/files.recieve.42.all  
+echo " cat utils.cpp  >> ./all_files_set/files.recieve.42.all  "
+cat GPS_Handler.cpp  >> ./all_files_set/files.recieve.42.all
+echo " cat SPI_Manager.cpp   >> ./all_files_set/files.recieve.42.all "
+cat I2C_Master.cpp   >> ./all_files_set/files.recieve.42.all
+echo " cat GY87_Handler.cpp  >> ./all_files_set/files.recieve.42.all  "
+cat MPU9250_Handler.cpp  >> ./all_files_set/files.recieve.42.all
+cat BatteryMonitor.cpp  >> ./all_files_set/files.recieve.42.all
+cat FlightStabilizer.cpp  >> ./all_files_set/files.recieve.42.all
+cat FilterManager.cpp  >> ./all_files_set/files.recieve.42.all
+cat MadgwickFilter.cpp  >> ./all_files_set/files.recieve.42.all
+cat MahonyFilter.cpp  >> ./all_files_set/files.recieve.42.all
+cat VibrationEstimator.cpp  >> ./all_files_set/files.recieve.42.all
+cat VibrationLogger.cpp  >> ./all_files_set/files.recieve.42.all
+echo "  cat FlightStabilizer.cpp  >> ./all_files_set/files.recieve.42.all "
+echo "  cat FlightStabilizer.cpp  >> ./all_files_set/files.recieve.42.all "
+echo " cat ModuleManager.cpp  >> ./all_files_set/files.create.2.all  "
+echo " cat LoRa_Handler.cpp  >> ./all_files_set/files.recieve.42.all "
+echo " cat SD_Handler.cpp  >> ./all_files_set/files.recieve.42.all "
+echo " cat SystemTests.cpp   >> ./all_files_set/files.recieve.42.all  "
+echo " cat CommandHandler.cpp   >> ./all_files_set/files.recieve.42.all  "
+echo " cat ESP32_pin_set_schem.md >> ./all_files_set/files.recieve.42.all "
+echo " cat CommandHandler.cpp   >> ./all_files_set/files.recieve.42.all "
+
+echo "------------- Файл       :: files.create.all   создан --FULL---------"
+
+echo "------------- Готово        -!-"
+
+
+
+
+
