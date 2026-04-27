@@ -1,0 +1,19 @@
+services:
+  drone-camera:
+    image: debian:bookworm-slim
+    container_name: drone-cam-pi02w
+    working_dir: /app
+    volumes:
+      - ./camera_pipeline.bin:/app/camera_pipeline:ro
+      - ./archive:/app/archive
+    devices:
+      - /dev/media0:/dev/media0
+      - /dev/video0:/dev/video0
+      - /dev/video1:/dev/video1
+    group_add:
+      - video
+      - dialout  # для UART
+    security_opt:
+      - seccomp:unconfined
+    command: bash -c "chmod +x /app/camera_pipeline && /app/camera_pipeline"
+    restart: unless-stopped

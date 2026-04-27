@@ -1,0 +1,79 @@
+# syntax=docker/dockerfile:1.4
+# Dockerfile.rpi-zero2w
+FROM debian:bookworm-slim
+
+LABEL maintainer="your@email.com"
+LABEL description="RPi Zero 2W + ESP32 Drone Dev Env"
+
+ENV DEBIAN_FRONTEND=noninteractive \
+    LANG=en_US.UTF-8 \
+    LANGUAGE=en_US:en \
+    LC_ALL=en_US.UTF-8 \
+    IDF_TOOLS_PATH=/opt/esp/.espressif \
+    IDF_PATH=/opt/esp/idf \
+    IDF_VERSION=v5.3.2
+
+# === 1. ВСЕ системные зависимости + кросс-компилятор ARM64 ===
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential cmake git wget curl python3 python3-pip python3-serial \
+    pkg-config \
+    gcc-aarch64-linux-gnu g++-aarch64-linux-gnu \
+    libcamera-dev libcamera-apps \
+    libopencv-dev python3-opencv python3-numpy \
+    ffmpeg gstreamer1.0-tools v4l-utils \
+    libgpiod-dev sudo locales tzdata \
+    && rm -rf /var/lib/apt/lists/*
+
+# === 2. Локаль и часовой пояс ===
+RUN sed -i 's/# en_US.UTF-8 UTF-8/en_US.UTF-8 UTF-8/' /etc/locale.gen && \
+    sed -i 's/# ru_RU.UTF-8 UTF-8/ru_RU.UTF-8 UTF-8/' /etc/locale.gen && \
+    locale-gen en_US.UTF-8 ru_RU.UTF-8
+
+ENV TZ=Europe/Moscow
+RUN ln -fs /usr/share/zoneinfo/Europe/Moscow /etc/localtime && \
+    echo "Europe/Moscow" > /etc/timezone
+
+# === 3. Установка ESP-IDF (опционально, для ESP32) ===
+RUN git clone --depth 1 --branch ${IDF_VERSION} https://github.com/espressif/esp-idf.git /opt/esp/idf && \
+    cd /opt/esp/idf && \
+    ./install.sh esp32 && \
+    chmod -R a+rw /opt/esp
+
+# === 4. Установка code-server (ОБЯЗАТЕЛЬНО: до создания пользователя!) ===
+RUN curl -fsSL https://code-server.dev/install.sh | sh -s -- --method=standalone && \
+    which code-server || { echo "❌ code-server install failed"; exit 1; }
+
+# === 5. Создание пользователя 'dev' ===
+RUN useradd -m -u 1000 -s /bin/bash dev && \
+    echo "dev:dev" | chpasswd && \
+    adduser dev sudo && \
+    echo "dev ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers && \
+    echo 'source /opt/esp/idf/export.sh 2>/dev/null || true' >> /home/dev/.bashrc && \
+    usermod -aG video,dialout dev && \
+    mkdir -p /workspace /home/dev/.local/share/code-server/User && \
+    chown -R dev:dev /workspace /opt/esp /home/dev/.local
+
+# === 6. Переключаемся на dev ===
+USER dev
+WORKDIR /workspace
+
+# === 7. Настройки code-server (через printf — надёжно) ===
+RUN printf '%s\n' \
+    '{' \
+    '  "extensions.autoUpdate": false,' \
+    '  "files.autoSave": "afterDelay",' \
+    '  "editor.formatOnSave": true,' \
+    '  "C_Cpp.default.compilerPath": "/usr/bin/aarch64-linux-gnu-gcc",' \
+    '  "C_Cpp.default.cStandard": "c11",' \
+    '  "C_Cpp.default.cppStandard": "c++17",' \
+    '  "terminal.integrated.defaultProfile.linux": "bash",' \
+    '  "files.encoding": "utf8"' \
+    '}' > /home/dev/.local/share/code-server/User/settings.json
+
+# === 8. Расширения ===
+RUN code-server --install-extension ms-vscode.cpptools || true && \
+    code-server --install-extension espressif.esp-idf-extension || true && \
+    code-server --install-extension platformio.platformio-ide || true
+
+EXPOSE 8080
+CMD ["code-server", "--bind-addr", "0.0.0.0:8080", "--auth", "none", "/workspace"]
