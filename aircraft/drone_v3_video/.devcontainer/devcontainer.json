@@ -27,4 +27,3 @@
   },
   "postCreateCommand": "mkdir -p /workspace/src /workspace/build /workspace/archive && sudo chown -R dev:dev /workspace"
 }
-

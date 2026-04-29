@@ -1,0 +1,19 @@
+{
+  "name": "RPi Zero 2W Drone Dev",
+  "build": { "dockerfile": "Dockerfile", "context": ".." },
+  "remoteUser": "dev",
+  "workspaceFolder": "/workspace",
+  "customizations": {
+    "vscode": {
+      "extensions": ["ms-vscode.cpptools", "ms-python.python", "platformio.platformio-ide"],
+      "settings": {
+        "C_Cpp.default.compilerPath": "/usr/bin/aarch64-linux-gnu-gcc",
+        "C_Cpp.default.cStandard": "c11",
+        "C_Cpp.default.cppStandard": "c++17",
+        "editor.formatOnSave": true
+      }
+    }
+  },
+  "postCreateCommand": "mkdir -p /workspace/archive && sudo chown -R dev:dev /workspace"
+}
+

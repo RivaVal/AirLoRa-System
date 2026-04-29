@@ -1,0 +1,65 @@
+# syntax=docker/dockerfile:1.4
+# Dockerfile.rpi-zero2w
+FROM debian:bookworm-slim
+
+LABEL maintainer="your@email.com"
+LABEL description="RPi Zero 2W dev env + code-server IDE"
+
+ENV DEBIAN_FRONTEND=noninteractive \
+    LANG=en_US.UTF-8 \
+    LANGUAGE=en_US:en \
+    LC_ALL=en_US.UTF-8 \
+    CODE_SERVER_VERSION=4.92.2
+
+# === 1. ВСЕ зависимости + кросс-компилятор + pkg-config + lib для code-server ===
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential cmake git wget curl python3 python3-pip python3-serial \
+    pkg-config gcc-aarch64-linux-gnu g++-aarch64-linux-gnu \
+    libgpiod-dev sudo locales \
+    # Зависимости для code-server (обязательно!)
+    libsecret-1-0 libx11-6 libxkbfile1 libkrb5-3 ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+# === 2. Локаль ===
+RUN sed -i 's/# en_US.UTF-8 UTF-8/en_US.UTF-8 UTF-8/' /etc/locale.gen && \
+    locale-gen en_US.UTF-8
+
+# === 3. Установка code-server ПРЯМОЙ ЗАГРУЗКОЙ (надёжнее install.sh!) ===
+RUN ARCH=$(uname -m | sed 's/aarch64/arm64/;s/armv7l/armhf/') && \
+    wget -qO- "https://github.com/coder/code-server/releases/download/v${CODE_SERVER_VERSION}/code-server_${CODE_SERVER_VERSION}_linux-${ARCH}.tar.gz" | \
+    tar -xzC /opt && \
+    ln -s /opt/code-server_${CODE_SERVER_VERSION}_linux-${ARCH}/bin/code-server /usr/local/bin/code-server && \
+    which code-server && code-server --version
+
+# === 4. Создание пользователя 'dev' (ПЕРЕД настройкой конфигов!) ===
+RUN useradd -m -u 1000 -s /bin/bash dev && \
+    echo "dev:dev" | chpasswd && \
+    adduser dev sudo && \
+    echo "dev ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers && \
+    usermod -aG video,dialout dev && \
+    mkdir -p /workspace /home/dev/.local/share/code-server/User && \
+    chown -R dev:dev /workspace /home/dev/.local
+
+# === 5. Переключаемся на dev ===
+USER dev
+WORKDIR /workspace
+
+# === 6. Настройки VS Code (через printf — надёжнее heredoc) ===
+RUN printf '%s\n' \
+    '{' \
+    '  "extensions.autoUpdate": false,' \
+    '  "files.autoSave": "afterDelay",' \
+    '  "editor.formatOnSave": true,' \
+    '  "C_Cpp.default.compilerPath": "/usr/bin/aarch64-linux-gnu-gcc",' \
+    '  "C_Cpp.default.cStandard": "c11",' \
+    '  "C_Cpp.default.cppStandard": "c++17",' \
+    '  "terminal.integrated.defaultProfile.linux": "bash",' \
+    '  "files.encoding": "utf8"' \
+    '}' > /home/dev/.local/share/code-server/User/settings.json
+
+# === 7. Расширения (теперь code-server точно установлен) ===
+RUN code-server --install-extension ms-vscode.cpptools --force || true && \
+    code-server --install-extension platformio.platformio-ide --force || true
+
+EXPOSE 8080
+CMD ["code-server", "--bind-addr", "0.0.0.0:8080", "--auth", "none", "/workspace"]

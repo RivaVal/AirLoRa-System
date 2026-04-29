@@ -1,0 +1,18 @@
+# docker-compose.yml
+services:
+  rpi-dev-ide:
+    build:
+      context: .
+      dockerfile: Dockerfile.rpi-zero2w
+    container_name: rpi-zero2w-dev
+    ports:
+      - "8080:8080"
+    volumes:
+      - .:/workspace:cached
+    environment:
+      - TZ=Europe/Moscow
+    stdin_open: true
+    tty: true
+    init: true                # ← Включает tini (правильно пробрасывает сигналы)
+    stop_grace_period: 5s     # ← Не ждёт 14 сек, завершает за 5
+    # restart: unless-stopped # ← ЗАКОММЕНТИРОВАНО или УДАЛЕНО

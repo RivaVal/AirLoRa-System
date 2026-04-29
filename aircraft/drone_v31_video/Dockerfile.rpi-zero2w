@@ -1,0 +1,97 @@
+# syntax=docker/dockerfile:1.4
+# Dockerfile.rpi-zero2w
+# 📦 Полная среда разработки для Pi Zero 2W + code-server IDE
+
+FROM codercom/code-server:4.92.2
+
+LABEL maintainer="your@email.com"
+LABEL description="RPi Zero 2W Drone Dev Env + Video Pipeline"
+
+# Переключаемся на root для установки пакетов
+USER root
+
+ENV DEBIAN_FRONTEND=noninteractive \
+    LANG=en_US.UTF-8 \
+    LANGUAGE=en_US:en \
+    LC_ALL=en_US.UTF-8
+
+# =============================================================================
+# 🔧 ШАГ 1: Системные зависимости (ОБЯЗАТЕЛЬНО для OpenCV и ffmpeg)
+# =============================================================================
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    # Базовые инструменты сборки
+    build-essential cmake git wget curl \
+    # Python и pip
+    python3 python3-pip python3-serial \
+    # Кросс-компилятор для ARM64 (сборка под Pi)
+    gcc-aarch64-linux-gnu g++-aarch64-linux-gnu \
+    # Утилиты для CMake поиска библиотек
+    pkg-config \
+    # Зависимости OpenCV (libgl1, libglib2.0-0 — критичны!)
+    libgl1 libglib2.0-0 libsm6 libxext6 libxrender1 libgomp1 \
+    # FFmpeg для кодирования/стриминга
+    ffmpeg \
+    # Дополнительные утилиты
+    sudo locales \
+    && rm -rf /var/lib/apt/lists/*
+
+# =============================================================================
+# 🌍 ШАГ 2: Локаль (для корректного отображения кириллицы в логах)
+# =============================================================================
+RUN sed -i 's/# en_US.UTF-8 UTF-8/en_US.UTF-8 UTF-8/' /etc/locale.gen && \
+    locale-gen en_US.UTF-8
+
+# =============================================================================
+# 🐍 ШАГ 3: Python-зависимости проекта (УСТАНАВЛИВАЕМ НАВСЕГДА!)
+# =============================================================================
+# Флаг --break-system-packages БЕЗОПАСЕН в Docker (изолированная среда)
+RUN pip install --break-system-packages --no-cache-dir \
+    opencv-python-headless \
+    numpy \
+    pyserial \
+    && python3 -c "import cv2, numpy, serial; print('✅ Python deps OK')"
+
+# =============================================================================
+# ⚙️ ШАГ 4: Настройки VS Code / code-server
+# =============================================================================
+RUN mkdir -p /home/coder/.local/share/code-server/User && \
+    printf '%s\n' \
+    '{' \
+    '  "extensions.autoUpdate": false,' \
+    '  "files.autoSave": "afterDelay",' \
+    '  "editor.formatOnSave": true,' \
+    '  "C_Cpp.default.compilerPath": "/usr/bin/aarch64-linux-gnu-gcc",' \
+    '  "C_Cpp.default.cStandard": "c11",' \
+    '  "C_Cpp.default.cppStandard": "c++17",' \
+    '  "terminal.integrated.defaultProfile.linux": "bash",' \
+    '  "files.encoding": "utf8",' \
+    '  "python.defaultInterpreterPath": "/usr/bin/python3"' \
+    '}' > /home/coder/.local/share/code-server/User/settings.json
+
+# =============================================================================
+# 🧩 ШАГ 5: Расширения VS Code (опционально, но полезно)
+# =============================================================================
+RUN code-server --install-extension ms-vscode.cpptools --force || true && \
+    code-server --install-extension ms-python.python --force || true && \
+    code-server --install-extension platformio.platformio-ide --force || true
+
+# =============================================================================
+# 👤 ШАГ 6: Права на рабочую папку и переключение на пользователя coder
+# =============================================================================
+RUN mkdir -p /workspace/src /workspace/build /workspace/archive /workspace/ground_archive && \
+    chown -R coder:coder /workspace /home/coder/.local
+
+# Создаём рабочие директории и назначаем владельца ДО переключения пользователя
+RUN mkdir -p /workspace/src /workspace/build /workspace/archive /workspace/ground_archive && \
+    chown -R coder:coder /workspace /home/coder/.local
+
+
+# Переключаемся на непривилегированного пользователя (безопасность!)
+USER coder
+WORKDIR /workspace
+
+# =============================================================================
+# 🚀 ЗАПУСК code-server
+# =============================================================================
+EXPOSE 8080
+CMD ["code-server", "--bind-addr", "0.0.0.0:8080", "--auth", "none", "/workspace"]
