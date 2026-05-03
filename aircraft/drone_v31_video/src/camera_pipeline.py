@@ -25,7 +25,8 @@ signal.signal(signal.SIGTERM, signal_handler)
 signal.signal(signal.SIGINT, signal_handler)
 
 from camera_interface import MockCamera, RealCamera
-from uart_telemetry import TelemetryReader
+#   from uart_telemetry import TelemetryReader
+from uart_telemetry import BinaryTelemetryReader as TelemetryReader
 
 class VideoPipeline:
     def __init__(self, use_mock=True, enable_telemetry=True,
