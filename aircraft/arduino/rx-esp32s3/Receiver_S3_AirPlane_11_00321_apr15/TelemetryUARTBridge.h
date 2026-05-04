@@ -121,11 +121,12 @@ public:
     static void getStats(uint32_t& sent, uint32_t& errors, float& avg_latency_ms);
 
     /**
-     * @brief Проверка состояния инициализации UART-моста
-     * @return true если UART2 успешно настроен и готов к работе
-     */
-    static bool isInitialized() { return _initialized; }
-
+    * @brief Проверка состояния инициализации UART-моста
+    * @return true если UART2 успешно настроен и готов к работе
+    * @note Статический метод — вызывается без экземпляра класса
+    */
+    static bool isInitialized() { return _initialized; }  // ← inline-реализация
+    
     /**
      * @brief Неблокирующая обработка входящих команд от RPi
      * @param handler Лямбда или указатель на функцию обработки команды

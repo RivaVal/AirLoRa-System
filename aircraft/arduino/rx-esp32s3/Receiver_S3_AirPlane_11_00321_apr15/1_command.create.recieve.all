@@ -29,7 +29,7 @@ cat   VibrationLogger.h  >> ./all_files_set/files.recieve.42.all
 echo " cat   SystemTests.h  >> ./all_files_set/files.recieve.42.all "
 echo "------- Файл      :./all_files_set/files.recieve.42.all ---1---создан -!----"  
 
-cat Receiver_S3_AirPlane_11_0031_apr15.ino >> ./all_files_set/files.recieve.42.all
+cat Receiver_S3_AirPlane_11_00321_apr15.ino >> ./all_files_set/files.recieve.42.all
 
 cat LoRaCommunicator.cpp  >> ./all_files_set/files.recieve.42.all 
 cat Unified_LEDC_Controller.cpp  >> ./all_files_set/files.recieve.42.all 

@@ -205,7 +205,8 @@
 
 #include "Config.h"
 #include "CommonTypes.h"
-        // #include "LCommunicator.h"
+#include "TelemetryUARTBridge.h"    // #include "LCommunicator.h"
+
 #include "LoRaCommunicator.h"
 #include "Unified_LEDC_Controller.h"
 #include "utils.h"
@@ -260,7 +261,8 @@ I2CMasterController*     I2CManager = nullptr;        ///< УКАЗАТЕЛЬ н
 MPU9250Handler*          imuHandler = nullptr;        // <-- НОВЫЙ УКАЗАТЕЛЬ на обработчик IMU
 FlightStabilizer*        flightStabilizer = nullptr;  ///< УКАЗАТЕЛЬ на стабилизатор
 BatteryMonitor*          batteryMonitor = nullptr;    ///< УКАЗАТЕЛЬ на монитор батареи
-GPSHandler*              GPSHandler = nullptr ;
+GPSHandler*              gpsHandler = nullptr;
+
 #if defined(CONFIG_IDF_TARGET_ESP32S3)
 static SPIClass fspi(FSPI);  // На S3 используем FSPI вместо VSPI // ← КРИТИЧЕСКИ: правильный экземпляр для S3
         //  SPI
@@ -749,6 +751,8 @@ void safeStartupDiagnostics() {
         pinMode(spi_pins[i], INPUT_PULLUP);
         delay(1);
         int level = digitalRead(spi_pins[i]);
+        ESP_LOGD("DIAG", "🔌 SPI %s (GPIO%d) = %s", 
+                spi_names[i], spi_pins[i], level ? "HIGH" : "LOW");  // ← использовать
         // ✅ ИСПОЛЬЗОВАТЬ обе переменные:
         ESP_LOGD("DIAG", "SPI Pin %d level: %d", spi_pins[i], level);
         ESP_LOGD("DIAG", "🔌 %s (GPIO%d) = %s", 
@@ -1175,7 +1179,64 @@ void setup() {
         }
     #endif
 
-    // 6. Инициализация LoRa (если включено)
+    // 7. Инициализация ATGM336H (если включено)
+    //=============================================================================
+    // 🛰️ ИНИЦИАЛИЗАЦИЯ GPS МОДУЛЯ (ATGM336H)
+    //=============================================================================
+    /**
+    * @brief Инициализация GPS-приёмника ATGM336H через UART1
+    * @details 
+    * - Поддержка двухрежимного позиционирования: GPS (США) + BDS (Китай)
+    * - Скорость обмена: 9600 бод (настраивается)
+    * - Протокол: NMEA 0183 (GGA, RMC, GSA, GSV предложения)
+    * - Пины: RX=GPIO18, TX=GPIO17 (Config::Pins::GPS_RX/GPS_TX)
+    * 
+    * @note Вызывать после инициализации Serial для отладки
+    */
+    #if CFG_ENABLE_GPS
+    if (_mConfig.enableGPS) {
+        ESP_LOGI(TAG_MAIN, "🛰️ Инициализация GPS_Handler (ATGM336H)...");
+        
+        // 🔑 Создаём объект обработчика
+        gpsHandler = new GPSHandler(&Serial1);  // Serial1 = UART1 на ESP32-S3
+        
+        if (gpsHandler == nullptr) {
+            ESP_LOGE(TAG_MAIN, "❌ ОШИБКА: Не удалось создать gpsHandler!");
+        } 
+        else {
+            // 🔑 Инициализация с параметрами:
+            // - Baud: 9600 (стандарт для ATGM336H)
+            // - Mode: GPS_BDS_COMBINED (максимальная точность)
+            if (!gpsHandler->begin(9600, NavigationMode::GPS_BDS_COMBINED)) {
+                ESP_LOGE(TAG_MAIN, "❌ ОШИБКА: Не удалось инициализировать GPS модуль");
+                delete gpsHandler;
+                gpsHandler = nullptr;
+            } else {
+                ESP_LOGI(TAG_MAIN, "✅ GPS_Handler инициализирован успешно");
+                ESP_LOGI(TAG_MAIN, "   Режим: GPS+BDS комбинированный");
+                ESP_LOGI(TAG_MAIN, "   Пины: RX=%d, TX=%d", 
+                        Config::Pins::GPS_RX, Config::Pins::GPS_TX);
+                
+                // 🔧 Тестовая самопроверка модуля (опционально, +2 сек)
+                #if defined(DEBUG_GPS_SELFTEST)
+                ESP_LOGI(TAG_MAIN, "🧪 Запуск самопроверки GPS...");
+                if (gpsHandler->runSelfTest()) {
+                    ESP_LOGI(TAG_MAIN, "✅ Самопроверка пройдена");
+                } else {
+                    ESP_LOGW(TAG_MAIN, "⚠️ Самопроверка не пройдена (проверьте антенну)");
+                }
+                #endif
+            }
+        }
+    } else {
+        ESP_LOGW(TAG_MAIN, "⚪ GPS модуль отключён в runtime-конфигурации");
+    }
+    #else
+        ESP_LOGW(TAG_MAIN, "⚪ GPS модуль отключён на этапе компиляции (CFG_ENABLE_GPS=0)");
+    #endif
+
+
+    // 7. Инициализация LoRa (если включено)
     // ========================================================================
     // 📡 ИНИЦИАЛИЗАЦИЯ LoRa -(SX1278)
     // ========================================================================
@@ -1235,7 +1296,11 @@ void setup() {
                 fspi                       // SPI instance
             ); // ← ссылка на инициализированный SPIClass
 
-            uint8_t test_read = 0;
+            uint8_t test_read = fspi.transfer(0x42);  // чтение регистра версии SX1278
+            ESP_LOGI(TAG_MAIN, "🔍 SPI test: RegVersion(0x42) = 0x%02X (expected 0x12)", test_read);
+            if (test_read != 0x12) {
+                ESP_LOGW(TAG_MAIN, "⚠️ SX1278 version mismatch! Check wiring/power.");
+            }
             
             if (loraModule != nullptr) {
                 ESP_LOGI(TAG_MAIN, "✅ Module SX1278 создан: CS=%d, DIO0=%d, RST=%d, DIO1=%d",
@@ -1344,12 +1409,13 @@ void setup() {
         }
     //}
     #endif
+
     // ============================================================
     //=============================================================
 
     // 🔹 Инициализация UART для RPi Zero 2W
     // ============================================================================
-    // 🔧 ИНИЦИАЛИЗАЦИЯ UART TELEMETRY BRIDGE
+    // 🔧 ИНИЦИАЛИЗАЦИЯ UART TELEMETRY BRIDGE  для RPi Zero 2W
     // ============================================================================
     ESP_LOGI("SETUP", "📡 Инициализация UART телеметрии...");
     if (!TelemetryUARTBridge::begin(
@@ -1579,7 +1645,10 @@ void loop() {
         if (millis() - lastImuPrint >= 1000) {
             if (imuHandler->isDataValid()) {
                 const SensorData& data = imuHandler->getData();
-                // ✅ ИСПОЛЬЗОВАТЬ data:
+                if (CDebug.lora && (packetCounter % 16 == 0)) {
+                    ESP_LOGD("LOOP", "🧭 IMU: Roll=%.1f° Pitch=%.1f° Yaw=%.1f°", 
+                            data.roll, data.pitch, data.yaw);
+}                // ✅ ИСПОЛЬЗОВАТЬ data:
                 //ESP_LOGD("LOOP", "🧭 IMU: Roll=%.1f° Pitch=%.1f° Yaw=%.1f° T=%.1f°C",
                 //     data.roll, data.pitch, data.yaw, data.temperature);
                 ESP_LOGD("LOOP", "🧭 IMU: Roll=%.1f° Pitch=%.1f° Yaw=%.1f° T=%.1f°C",
@@ -1590,6 +1659,43 @@ void loop() {
         }
     }
 
+    //=============================================================================
+    // 🛰️ ОБНОВЛЕНИЕ ДАННЫХ GPS
+    //=============================================================================
+    /**
+    * @brief Периодическое обновление GPS-данных
+    * @details 
+    * - Вызывает gpsHandler->update() для парсинга NMEA-предложений
+    * - Периодичность: на каждый проход loop() (неблокирующая обработка)
+    * - Данные кэшируются в структуре GPSData для доступа из других модулей
+    * 
+    * @note Данные используются в телеметрии и навигационных расчётах
+    */
+    #if CFG_ENABLE_GPS
+    if (gpsHandler != nullptr && _mConfig.enableGPS) {
+        // 🔑 Неблокирующее обновление: чтение доступных байт из UART
+        gpsHandler->update();
+        
+        // 🔧 Периодическая отладочная печать (раз в 5 секунд)
+        static uint32_t lastGpsLog = 0;
+        if (millis() - lastGpsLog >= 5000) {
+            if (gpsHandler->hasValidData()) {
+                const GPSData& gps = gpsHandler->getData();
+                ESP_LOGD("GPS_LOOP", "📍 GPS: Fix=%s | Sats=%d | HDOP=%.1f | Speed=%.1f км/ч",
+                        gpsHandler->fixStatusToString(gps.fix_status).c_str(),
+                        gps.satellites_used,
+                        gps.hdop,
+                        gps.speed);
+                ESP_LOGV("GPS_LOOP", "   Координаты: %.6f°, %.6f°, H=%.1fм",
+                        gps.latitude, gps.longitude, gps.altitude);
+            } else {
+                ESP_LOGV("GPS_LOOP", "⏳ GPS: Ожидание фиксации... (видимые: %d)", 
+                        gpsHandler->getData().satellites_visible);
+            }
+            lastGpsLog = millis();
+        }
+    }
+    #endif
 
     // ========================================================================
     // 📊 ПЕРИОДИЧЕСКАЯ СТАТИСТИКА
@@ -1653,81 +1759,184 @@ void loop() {
     // ============================================================================
     // 🔧 ОТПРАВКА ТЕЛЕМЕТРИИ НА RPi (каждые 20-50 мс)
     // ============================================================================
-
+    //=============================================================================
+    // 📡 ФОРМИРОВАНИЕ ПАКЕТА ТЕЛЕМЕТРИИ С ДАННЫМИ GPS
+    //=============================================================================
+    /**
+    * @brief Сборка телеметрического пакета для отправки на RPi Zero 2W
+    * @details Алгоритм формирования пакета (49 байт):
+    * 
+    * 1. Заголовок: [0xAA 0x55] (2 байта)
+    * 2. Payload (44 байта):
+    *    - Управление: packet_id, timestamp, com_*, com_flags
+    *    - Стабилизация: roll, pitch, yaw, altitude, speed
+    *    - Навигация: latitude, longitude (из GPS)
+    *    - Батарея: voltage, percentage
+    *    - Сигнал: rssi, flight_mode, imu_status
+    * 3. CRC8: полином 0x07, инициализация 0x00 (1 байт)
+    * 4. Футер: [0xCC 0x33] (2 байта)
+    * 
+    * @note Отправка неблокирующая: при переполнении буфера кадр пропускается
+    */
     if (telemTimer->is_ready() && TelemetryUARTBridge::isInitialized()) {
         
-
-    // 🔹 2. Отправка телеметрии каждые ~30 мс
-    if (telemTimer->is_ready() && TelemetryUARTBridge::isInitialized() && imuHandler->isDataValid()) {
-        TelemetryPacket_t pkt;
+        TelemetryPacket_t pkt = {};  // 🔑 Инициализация нулями
         
-        // 1. Команды пульта
-        // pkt.packet_id   = telemetryPacketCounter++;
-        pkt.packet_id   = receivedCommands.packet_id;
-        pkt.timestamp   = millis();
-        pkt.com_up      = receivedCommands.comUp;
-        pkt.com_left    = receivedCommands.comLeft;
-        pkt.com_throttle= receivedCommands.comThrottle;
-        pkt.com_flags   = receivedCommands.comSetAll;
-
-        // 2. Данные стабилизации
-        const SensorData& imuData = imuHandler->getData();
-        pkt.roll      = imuData.roll;
-        pkt.pitch     = imuData.pitch;
-        pkt.yaw       = imuData.yaw;
-        pkt.altitude  = imuData.altitude; // Если барометр подключён
-        // 🔑 Используем объект-обработчик (проверьте имя в вашем коде!)
-        // 3. Навигация
-        if (gpsHandler && gpsHandler->hasFix()) {
-            const GPSData& gpsData = gpsHandler->getData();  // ← Получаем данные один раз
-            pkt.speed     = gpsData.speed / 3.6f;            // Узлы → м/с
-            pkt.latitude  = gpsData.latitude;
-            pkt.longitude = gpsData.longitude;
+        // === 1. Данные управления (из LoRa) ===
+        pkt.packet_id    = receivedCommands.packet_id;
+        pkt.timestamp    = millis();
+        pkt.com_up       = receivedCommands.comUp;
+        pkt.com_left     = receivedCommands.comLeft;
+        pkt.com_throttle = receivedCommands.comThrottle;
+        pkt.com_flags    = receivedCommands.comSetAll;
+        
+        // === 2. Данные стабилизации (из FlightStabilizer) ===
+        if (imuHandler && imuHandler->isDataValid()) {
+            const SensorData& imu = imuHandler->getData();
+            pkt.roll     = imu.roll;
+            pkt.pitch    = imu.pitch;
+            pkt.yaw      = imu.yaw;
+            pkt.altitude = imu.altitude;  // Если барометр подключён
+        }
+        
+        // === 3. 🔑 НАВИГАЦИОННЫЕ ДАННЫЕ (из GPS) ===
+        #if CFG_ENABLE_GPS
+        if (gpsHandler && _mConfig.enableGPS && gpsHandler->hasValidData()) {
+            const GPSData& gps = gpsHandler->getData();
+            
+            // 🔧 Конвертация узлов → м/с для совместимости с ground station
+            pkt.speed = gps.speed / 3.6f;  // 1 узел = 1.852 км/ч = 0.514 м/с
+            
+            // 🔧 Координаты в десятичных градусах (WGS84)
+            pkt.latitude  = gps.latitude;
+            pkt.longitude = gps.longitude;
+            
+            ESP_LOGV("TELEM_GPS", "📤 Навигация: %.6f, %.6f, %.2f м/с",
+                    pkt.latitude, pkt.longitude, pkt.speed);
         } else {
+            // 🔧 Заглушка при отсутствии фикса: нулевые координаты
             pkt.speed     = 0.0f;
             pkt.latitude  = 0.0;
             pkt.longitude = 0.0;
+            ESP_LOGV("TELEM_GPS", "⚠️ GPS данных нет → нулевые координаты");
         }
-            //            // 3. Навигация
-            //            if (GPSData->hasFix()) {
-            //                // pkt.latitude  = gpsData.getData().latitude;
-            //                pkt.latitude  = GPSData->getData().latitude;
-            //
-            //                // pkt.longitude = gpsData.getData().longitude;
-            //                pkt.longitude = GPSData->getData().longitude;
-            //            }
-
-        // 4. Батарея
-        // BatteryStatus_t batt = batteryMon.getStatus();
-        // BatteryStatus_t batt = batteryMonitor.getStatus();
-        BatteryStatus_t batt = batteryMonitor->getStatus();
-        pkt.battery_voltage = batt.voltage;
-        pkt.battery_percent = static_cast<uint8_t>(batt.percentage);
-
-        // 5. Сигнал и статус
-        int16_t rssi = 0; 
-        uint32_t rxPkt = 0;
-        // loraReceiver->getStats(rxPkt, rxPkt, rxPkt, rxPkt, rxPkt); // Упрощено, возьмите из getStatsFull()
-        // receiver->getStats(rxPkt, rxPkt, rxPkt, rxPkt, rxPkt); // Упрощено, возьмите из getStatsFull()
-
+        #else
+        // 🔧 Если GPS отключён на этапе компиляции
+        pkt.speed     = 0.0f;
+        pkt.latitude  = 0.0;
+        pkt.longitude = 0.0;
+        #endif
+        
+        // === 4. Данные батареи ===
+        // if (batteryMonitor && batteryMonitor->_initialized()) {
+        if (batteryMonitor && batteryMonitor->isInitialixed()) {
+            BatteryStatus_t batt = batteryMonitor->getStatus();
+            pkt.battery_voltage = batt.voltage;
+            // 🔧 Конвертация float → uint8_t с ограничением диапазона
+            pkt.battery_percent = static_cast<uint8_t>(
+                constrain(batt.percentage, 0.0f, 100.0f)
+            );
+        }
+        
+        // === 5. Сигнал и статус системы ===
         if (receiver && receiver->isInitialized()) {
             ReceiverStats stats = receiver->getStatsFull();
             pkt.rssi = stats.lastRSSI;
-            // ... другие поля при необходимости
-        }
-
-        // pkt.rssi = rssi; // RSSI берётся из LoRa модуля
-        // pkt.flight_mode = static_cast<uint8_t>(flightStabilizer.getMode());
-        pkt.flight_mode = static_cast<uint8_t>(flightStabilizer->getMode());
-        pkt.imu_status  = imuData.status;
-
-        // Отправка (неблокирующая)
-        if (!TelemetryUARTBridge::sendTelemetry(pkt)) {
-            ESP_LOGW("UART_TX", "⏳ Пропуск кадра: буфер UART занят");
         } else {
-            ESP_LOGD("UART_TX", "📤 Telemetry sent ID:%u", pkt.packet_id);
+            pkt.rssi = -120;  // Заглушка: "нет сигнала"
         }
-    }
+        
+        pkt.flight_mode = flightStabilizer ? 
+            static_cast<uint8_t>(flightStabilizer->getMode()) : 1;  // 1=MANUAL
+        pkt.imu_status = (imuHandler && imuHandler->isDataValid()) ? 
+            imuHandler->getData().status : 0;
+        
+        // === 6. 🔑 ОТПРАВКА (неблокирующая) ===
+        if (!TelemetryUARTBridge::sendTelemetry(pkt)) {
+            ESP_LOGV("UART_TX", "⏳ Пропуск кадра телеметрии: буфер UART занят");
+        } else {
+            ESP_LOGD("UART_TX", "📤 Telemetry sent | ID:%u | RSSI:%d dBm", 
+                    pkt.packet_id, pkt.rssi);
+        }
+        
+        // 🔧 Сброс таймера после успешной отправки
+        telemTimer->reset();
+    } // END if (telemTimer->is_ready()
+
+                        /*
+                        if (telemTimer->is_ready() && TelemetryUARTBridge::isInitialized()) {
+                        // 🔹 2. Отправка телеметрии каждые ~30 мс
+                        if (telemTimer->is_ready() && TelemetryUARTBridge::isInitialized() && imuHandler->isDataValid()) {
+                            TelemetryPacket_t pkt;
+                            
+                            // 1. Команды пульта
+                            // pkt.packet_id   = telemetryPacketCounter++;
+                            pkt.packet_id   = receivedCommands.packet_id;
+                            pkt.timestamp   = millis();
+                            pkt.com_up      = receivedCommands.comUp;
+                            pkt.com_left    = receivedCommands.comLeft;
+                            pkt.com_throttle= receivedCommands.comThrottle;
+                            pkt.com_flags   = receivedCommands.comSetAll;
+
+                            // 2. Данные стабилизации
+                            const SensorData& imuData = imuHandler->getData();
+                            pkt.roll      = imuData.roll;
+                            pkt.pitch     = imuData.pitch;
+                            pkt.yaw       = imuData.yaw;
+                            pkt.altitude  = imuData.altitude; // Если барометр подключён
+                            // 🔑 Используем объект-обработчик (проверьте имя в вашем коде!)
+                            // 3. Навигация
+                            if (gpsHandler && gpsHandler->hasFix()) {
+                                const GPSData& gpsData = gpsHandler->getData();  // ← Получаем данные один раз
+                                pkt.speed     = gpsData.speed / 3.6f;            // Узлы → м/с
+                                pkt.latitude  = gpsData.latitude;
+                                pkt.longitude = gpsData.longitude;
+                            } else {
+                                pkt.speed     = 0.0f;
+                                pkt.latitude  = 0.0;
+                                pkt.longitude = 0.0;
+                            }
+                                //            // 3. Навигация
+                                //            if (GPSData->hasFix()) {
+                                //                // pkt.latitude  = gpsData.getData().latitude;
+                                //                pkt.latitude  = GPSData->getData().latitude;
+                                //
+                                //                // pkt.longitude = gpsData.getData().longitude;
+                                //                pkt.longitude = GPSData->getData().longitude;
+                                //            }
+
+                            // 4. Батарея
+                            // BatteryStatus_t batt = batteryMon.getStatus();
+                            // BatteryStatus_t batt = batteryMonitor.getStatus();
+                            BatteryStatus_t batt = batteryMonitor->getStatus();
+                            pkt.battery_voltage = batt.voltage;
+                            pkt.battery_percent = static_cast<uint8_t>(batt.percentage);
+
+                            // 5. Сигнал и статус
+                            int16_t rssi = 0; 
+                            uint32_t rxPkt = 0;
+                            // loraReceiver->getStats(rxPkt, rxPkt, rxPkt, rxPkt, rxPkt); // Упрощено, возьмите из getStatsFull()
+                            // receiver->getStats(rxPkt, rxPkt, rxPkt, rxPkt, rxPkt); // Упрощено, возьмите из getStatsFull()
+
+                            if (receiver && receiver->isInitialized()) {
+                                ReceiverStats stats = receiver->getStatsFull();
+                                pkt.rssi = stats.lastRSSI;
+                                // ... другие поля при необходимости
+                            }
+
+                            // pkt.rssi = rssi; // RSSI берётся из LoRa модуля
+                            // pkt.flight_mode = static_cast<uint8_t>(flightStabilizer.getMode());
+                            pkt.flight_mode = static_cast<uint8_t>(flightStabilizer->getMode());
+                            pkt.imu_status  = imuData.status;
+
+                            // Отправка (неблокирующая)
+                            if (!TelemetryUARTBridge::sendTelemetry(pkt)) {
+                                ESP_LOGW("UART_TX", "⏳ Пропуск кадра: буфер UART занят");
+                            } else {
+                                ESP_LOGD("UART_TX", "📤 Telemetry sent ID:%u", pkt.packet_id);
+                            }
+                        }
+                        */
 
                         /*  
                         // 🔑 1. Формирование пакета телеметрии
@@ -1786,16 +1995,72 @@ void loop() {
                                     ESP_LOGW("TELEM", "⚠️ Неизвестная команда: 0x%02X", cmd);
                             }
                         }
-                        */
     }// END if (telemTimer.is_ready()
+   */
 
+
+    //=======================================================================================
     //====================================================
     // 🔹 1. Обработка обратного канала (RPi → ESP32)
     //====================================================
+    //            if (TelemetryUARTBridge::isInitialized()) {
+    //                TelemetryUARTBridge::processRPiCommands(handleRPiCommand);
+    //            }
+    //=============================================================================
+    // 📥 ОБРАБОТКА КОМАНД ОТ RPi Zero 2W (обратный канал)
+    //=============================================================================
+    /**
+    * @brief Неблокирующая обработка входящих команд от Raspberry Pi
+    * @details 
+    * - Формат команды: [0xAA 0x55][cmd][CRC8][0xCC 0x33] (5 байт)
+    * - Поддерживаемые команды (enum RPiCommand в TelemetryUARTBridge.h):
+    *   • CMD_RESTART_CAM (0x01): Перезапуск камеры/видеопотока
+    *   • CMD_CHANGE_MODE (0x02): Смена режима полёта (MANUAL/STAB/FULL)
+    *   • CMD_HEARTBEAT   (0xFF): Сигнал "живости" для мониторинга связи
+    * 
+    * @note Обработка через callback-функцию handleRPiCommand()
+    */
     if (TelemetryUARTBridge::isInitialized()) {
-        TelemetryUARTBridge::processRPiCommands(handleRPiCommand);
-    }
-
+        // 🔑 Неблокирующий опрос входящих команд
+        TelemetryUARTBridge::processRPiCommands([](RPiCommand cmd) {
+            switch (cmd) {
+                case RPiCommand::CMD_RESTART_CAM:
+                    ESP_LOGW("UART_CMD", "📷 Получена команда: ПЕРЕЗАПУСК КАМЕРЫ");
+                    // 🔧 Здесь вызов функции перезапуска камеры:
+                    // if (cameraHandler) cameraHandler->restartStream();
+                    // 🔧 Индикация выполнения:
+                    ESP_LOGI("UART_CMD", "✅ Команда принята в обработку");
+                    break;
+                    
+                case RPiCommand::CMD_CHANGE_MODE:
+                    ESP_LOGW("UART_CMD", "🔄 Получена команда: СМЕНА РЕЖИМА ПОЛЁТА");
+                    // 🔧 Переключение режима стабилизации:
+                    if (flightStabilizer) {
+                        // Циклическое переключение: MANUAL → STAB → FULL → MANUAL
+                        auto current = flightStabilizer->getMode();
+                        StabilizationMode next = (current == StabilizationMode::MANUAL) ? 
+                            StabilizationMode::ROLL_PITCH :
+                            (current == StabilizationMode::ROLL_PITCH) ? 
+                            StabilizationMode::FULL : StabilizationMode::MANUAL;
+                        flightStabilizer->setMode(next);
+                        ESP_LOGI("UART_CMD", "✅ Режим изменён: %s", 
+                                flightStabilizer->modeToString(next));
+                    }
+                    break;
+                    
+                case RPiCommand::CMD_HEARTBEAT:
+                    // 🔧 Heartbeat для мониторинга связи (без действий, только лог)
+                    ESP_LOGD("UART_CMD", "❤️ RPi Heartbeat OK | Uptime: %lu сек", 
+                            millis() / 1000);
+                    break;
+                    
+                default:
+                    ESP_LOGW("UART_CMD", "⚠️ Неизвестная команда от RPi: 0x%02X", 
+                            static_cast<uint8_t>(cmd));
+                    break;
+            }
+        });
+    }  //END if (TelemetryUARTBridge
 
 
 

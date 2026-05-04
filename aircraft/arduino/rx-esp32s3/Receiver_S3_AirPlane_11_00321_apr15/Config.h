@@ -93,6 +93,7 @@ ESP32 Dev Module (38 pin) → Внешние модули
 #include <RadioLib.h>
 #include <cstdint>
 #include <driver/ledc.h>
+
 // ✅ НОВЫЙ ADC драйвер (ESP-IDF 5.0+)
 #include <esp_adc/adc_oneshot.h> // ESP-IDF 5.0+ ADC API
 

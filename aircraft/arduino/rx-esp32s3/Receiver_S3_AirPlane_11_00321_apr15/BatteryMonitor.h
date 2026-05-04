@@ -165,6 +165,7 @@ public:
     */
     void reset();
     
+    bool isInitialixed() {return _initialized; }
     
 private:
     BatteryStatus_t _lastStatus;
