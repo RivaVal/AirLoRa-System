@@ -61,26 +61,44 @@ bool TelemetryUARTBridge::begin(uint32_t baudrate, uint8_t tx_pin, uint8_t rx_pi
     ESP_LOGI(TAG, "🚀 Инициализация UART2: %d бод, TX=%d, RX=%d", 
              baudrate, tx_pin, rx_pin);
     
+    ESP_LOGI(TAG, "🚀 Инициализация UART2: %d бод | TX=%d, RX=%d | RTS=%d, CTS=%d",
+             baudrate, tx_pin, rx_pin, rts_pin, cts_pin);
+
     // 🔑 Создаём объект HardwareSerial для UART2 (UART_NUM_2 на ESP32-S3)
     _uart = new HardwareSerial(2);  // UART2
     
-    // 🔧 Настройка пинов с аппаратным Flow Control (если заданы)
-    if (rts_pin >= 0 && cts_pin >= 0) {
-        ESP_LOGI(TAG, "✅ Flow Control: RTS=%d, CTS=%d", rts_pin, cts_pin);
-        _uart->begin(baudrate, SERIAL_8N1, rx_pin, tx_pin, true, 
-                    static_cast<gpio_num_t>(rts_pin), 
-                    static_cast<gpio_num_t>(cts_pin));
-    } else {
-        ESP_LOGW(TAG, "⚠️ Flow Control отключён (рекомендуется для 921600 бод!)");
-        _uart->begin(baudrate, SERIAL_8N1, rx_pin, tx_pin);
-    }
-    
-    // 🔧 Настройка буферов для высокой скорости
-    _uart->setRxBufferSize(2048);  // Увеличенный буфер приёма
-    _uart->setTxBufferSize(2048);  // Увеличенный буфер передачи
-    
-    // 🔧 Задержка для стабилизации
-    delay(10);
+    // 🔑 ВКЛЮЧЕНИЕ АППАРАТНОГО FLOW CONTROL
+    // 5-й параметр (true) включает RTS/CTS. Пины передаются напрямую.
+    _uart->begin(baudrate, SERIAL_8N1, rx_pin, tx_pin, true, 
+                 static_cast<gpio_num_t>(rts_pin), 
+                 static_cast<gpio_num_t>(cts_pin));
+
+    _uart->setRxBufferSize(4096);  // Увеличен для пиков видеопотока
+    _uart->setTxBufferSize(4096);
+    delay(10);  // 🔧 Задержка для стабилизации
+
+    // 🔧 Диагностика состояния линий RTS/CTS при старте
+    ESP_LOGD(TAG, "📊 Состояние Flow Control: RTS(GPIO%d)=%s, CTS(GPIO%d)=%s",
+             rts_pin, digitalRead(rts_pin) ? "HIGH" : "LOW",
+             cts_pin, digitalRead(cts_pin) ? "HIGH" : "LOW");
+
+            //                    // 🔧 Настройка пинов с аппаратным Flow Control (если заданы)
+            //                    if (rts_pin >= 0 && cts_pin >= 0) {
+            //                        ESP_LOGI(TAG, "✅ Flow Control: RTS=%d, CTS=%d", rts_pin, cts_pin);
+            //                        _uart->begin(baudrate, SERIAL_8N1, rx_pin, tx_pin, true, 
+            //                                    static_cast<gpio_num_t>(rts_pin), 
+            //                                    static_cast<gpio_num_t>(cts_pin));
+            //                    } else {
+            //                        ESP_LOGW(TAG, "⚠️ Flow Control отключён (рекомендуется для 921600 бод!)");
+            //                        _uart->begin(baudrate, SERIAL_8N1, rx_pin, tx_pin);
+            //                    }
+                                
+            //                    // 🔧 Настройка буферов для высокой скорости
+            //                    _uart->setRxBufferSize(2048);  // Увеличенный буфер приёма
+            //                    _uart->setTxBufferSize(2048);  // Увеличенный буфер передачи
+                                
+                                    // 🔧 Задержка для стабилизации
+                                    //delay(10);
     
     // 🔧 Проверка связи (опционально)
     if (_uart->available()) {

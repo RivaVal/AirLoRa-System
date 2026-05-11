@@ -1422,28 +1422,36 @@ void setup() {
             921600,                              // 🔑 Высокая скорость
             Config::Pins::UART_RPI_TX,          // TX = GPIO5
             Config::Pins::UART_RPI_RX,          // RX = GPIO6
-            -1, -1)) {                          // 🔧 RTS/CTS: раскомментировать при использовании
-        // int8_t rts = 3, cts = 42;  // 🔑 Пример пинов для Flow Control
-        ESP_LOGE("SETUP", "❌ Ошибка инициализации UART телеметрии!");
-    }
-    ESP_LOGI("SETUP", "✅ UART телеметрия готова");
+            Config::Pins::UART_RPI_RTS,         // 🔑 RTS = GPIO1
+            Config::Pins::UART_RPI_CTS          // 🔑 CTS = GPIO3
+        )) {
+            ESP_LOGE("SETUP", "❌ Ошибка инициализации UART телеметрии с Flow Control!");
+        } else {
+            ESP_LOGI("SETUP", "✅ UART телеметрия готова (Flow Control: RTS=1, CTS=3)");
+        }
+            //                        -1, -1)) {                          // 🔧 RTS/CTS: раскомментировать при использовании
+            //                    // int8_t rts = 3, cts = 42;  // 🔑 Пример пинов для Flow Control
+            //                    ESP_LOGE("SETUP", "❌ Ошибка инициализации UART телеметрии!");
+            //                }
+
+            // ESP_LOGI("SETUP", "✅ UART телеметрия готова");
 
 
-        //
-        //            SerialRPi.begin(115200, SERIAL_8N1, Config::Pins::UART_RPI_RX, Config::Pins::UART_RPI_TX);
-        //            ESP_LOGI("UART_RPI", "✅ UART2 инициализирован: RX=GPIO%d, TX=GPIO%d, Baud=115200",
-        //                    Config::Pins::UART_RPI_RX, Config::Pins::UART_RPI_TX);
+            //
+            //            SerialRPi.begin(115200, SERIAL_8N1, Config::Pins::UART_RPI_RX, Config::Pins::UART_RPI_TX);
+            //            ESP_LOGI("UART_RPI", "✅ UART2 инициализирован: RX=GPIO%d, TX=GPIO%d, Baud=115200",
+            //                    Config::Pins::UART_RPI_RX, Config::Pins::UART_RPI_TX);
 
         // В ФУНКЦИИ setup() -> после инициализации всех модулей (batteryMonitor, receiver, imuHandler)
             ESP_LOGI("MAIN", "⚙️  Запуск моста телеметрии UART2 → RPi...");
-        // === ИНИЦИАЛИЗАЦИЯ ТЕЛЕМЕТРИЧЕСКОГО МОСТА ===
-        //                    ESP_LOGI("MAIN", "⚙️  Инициализация TelemetryBridge...");
-        //                    if (!TelemetryBridge::begin()) {
-        //                        ESP_LOGE("MAIN", "❌ Критическая ошибка: не удалось инициализировать UART2 для RPi!");
-        //                        // Не останавливаем систему — телеметрия опциональна
-        //                    } else {
-        //                        ESP_LOGI("MAIN", "✅ TelemetryBridge готов (921600 бод, Flow Control)");
-        //                    }
+            // === ИНИЦИАЛИЗАЦИЯ ТЕЛЕМЕТРИЧЕСКОГО МОСТА ===
+            //                    ESP_LOGI("MAIN", "⚙️  Инициализация TelemetryBridge...");
+            //                    if (!TelemetryBridge::begin()) {
+            //                        ESP_LOGE("MAIN", "❌ Критическая ошибка: не удалось инициализировать UART2 для RPi!");
+            //                        // Не останавливаем систему — телеметрия опциональна
+            //                    } else {
+            //                        ESP_LOGI("MAIN", "✅ TelemetryBridge готов (921600 бод, Flow Control)");
+            //                    }
     //====================================================================================
     // ========================================================================
     // ✅ ПРЕДСТАРТОВЫЕ ТЕСТЫ ИСПОЛНИТЕЛЬНЫХ УСТРОЙСТВ

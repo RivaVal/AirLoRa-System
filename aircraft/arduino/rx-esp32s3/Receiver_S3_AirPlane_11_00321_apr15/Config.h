@@ -1,61 +1,9 @@
-/*
+
 // НОВОЕ Распределение пинов 
 //==================================================================
-//  🔧 РАБОЧИЙ Исправленный Config.h       
+//  🔧 РАБОЧИЙ Исправленный Config.h для ESP32      
 //==================================================================
-
-
-Отличное решение! Вернемся к практической задаче. 
-Разберем подключение LoRa модуля RA-01 SX1278 - это действительно важный момент. 📡
-🔌 Подключение LoRa модуля RA-01 SX1278
-SPI интерфейс - что это:
-
-SPI (Serial Peripheral Interface) - это синхронный последовательный интерфейс, где есть "ведущий" (ESP32) и "ведомый" (LoRa модуль).
-Расшифровка выводов LoRa:
-Вывод LoRa	Назначение	Подключение к ESP32
-SCK	Serial Clock - тактовый сигнал	GPIO18
-MISO	Master In Slave Out - данные от LoRa к ESP32	GPIO19
-MOSI	Master Out Slave In - данные от ESP32 к LoRa	GPIO23
-NSS/SS	Slave Select - выбор устройства	GPIO5
-RST	Reset - сброс модуля	GPIO13
-DIO0	Digital I/O 0 - прерывания	GPIO4
-✅ Ваша конфигурация ПРАВИЛЬНАЯ:
-
-
-📋 Полная схема подключения ESP32:
-ESP32 Dev Module (38 pin) → Внешние модули
-┌────────────-─────┬─────────────────────────┐
-│ ESP32 Pin        │ Подключение             │
-├───────────-──────┼─────────────────────────┤
-│ GPIO 5           │ LoRa SS/NSS             │
-│ GPIO 13          │ LoRa RST                │
-│ GPIO 4           │ LoRa DIO0               │
-│ GPIO 18          │ LoRa SCK                │
-│ GPIO 19          │ LoRa MISO               │
-│ GPIO 23          │ LoRa MOSI               │
-│ GPIO 16          │ GPS TX → ESP32 RX-16    │
-│ GPIO 17          │ GPS RX ← ESP32 TX-17    │
-│ GPIO 21          │ I2C SDA (общий)         │
-│ GPIO 22          │ I2C SCL (общий)         │
-│ GPIO 25,26,27,   │ Сервоприводы (PWM)      │
-│ GPIO 15,33       │ Сервоприводы (PWM)      │
-│ GPIO 32,14       │ Моторы (PWM)            │
-└───────────=──────┴─────────────────────────┘
-//  🎯 Полностью исправленный
 //
-//## 📌 Критически важные замечания по пинам (ваше требование соблюдено!)
-//
-//Все пины остаются **без изменений** согласно `Config.h`:
-//
-// SERVOS: через PCA9685 (I2C: SDA=21, SCL=22)
-//   Серво #0 → Канал 0: Левый элерон
-//   Серво #1 → Канал 1: Правый элерон  
-//   Серво #2 → Канал 2: Левый руль высоты
-//   Серво #3 → Канал 3: Правый руль высоты
-//   Серво #4 → Канал 4: Руль направления
-//   Серво #5 → Канал 5: Парашют
-//   Серво #6 → Канал 6: Вспомогательный
-*/
 /**
 * @file Config.h
 * @brief Конфигурация проекта ESP32 Receiver
@@ -175,7 +123,7 @@ namespace BattAkkMonitor {
     //     {4,  16.8f, 14.8f, 12.0f, 11.2f, "4S LiPo"},
     // Пороговые значения напряжения
     constexpr float VOLTAGE_MAX = 16.8f;         // Максимальное напряжение (перезаряд)
-    constexpr float VOLTAGE_NOMINAL = 14.8f;
+    constexpr float VOLTAGE_NOMINAL = 14.8f;     // Нормальное рабочее напряжение 
     constexpr float VOLTAGE_MIN = 12.0f;         // Минимальное напряжение (разряд)
     constexpr float VOLTAGE_CRITICAL = 11.2f;    // Критическое напряжение
     
@@ -259,10 +207,10 @@ namespace Config {
     // extern SPIClass* hspi; // Объявляем, определим в .cpp файле
 
     namespace Pins {
-//=============================================================================
-// 🔧 ESP32-S3 PIN MAP — АДАПТИВНАЯ КОНФИГУРАЦИЯ
-//    КАРТА ПИНОВ (ESP32-S3) 
-//=============================================================================
+    //=============================================================================
+    // 🔧 ESP32-S3 PIN MAP — АДАПТИВНАЯ КОНФИГУРАЦИЯ
+    //    КАРТА ПИНОВ (ESP32-S3) 
+    //=============================================================================
 #if defined(CONFIG_IDF_TARGET_ESP32S3) || defined(ARDUINO_USB_CDC_ON_BOOT)
     // ================== ESP32-S3 PIN MAP (БЕЗОПАСНАЯ) ==================
     // ⚠️ ИЗБЕГАТЬ: 
@@ -274,14 +222,14 @@ namespace Config {
     // 📡 LoRa SX1278 (SPI через FSPI)
     // Используем фиксированные пины FSPI для максимальной производительности
     // 🔌 FSPI шина (стандарт для ESP32-S3)
-    constexpr uint8_t LORA_CS    = 10; // FSPI CS
+    constexpr uint8_t LORA_CS    = 10; // FSPI CS-NSS
     constexpr uint8_t FSPI_SCLK  = 12; // FSPI Clock
     constexpr uint8_t FSPI_MISO  = 13; // FSPI Master In Slave Out
     constexpr uint8_t FSPI_MOSI  = 11; // FSPI Master Out Slave In
 
     // --- LoRa Control GPIOs ---
     // ВНИМАНИЕ: GPIO 9 занят под I2C SCL. Пин RST перенесен на 15 (безопасный GPIO).
-    constexpr uint8_t LORA_RST   = 15; 
+    constexpr uint8_t LORA_RST   = 15; // Gpio_16 ИСКЛЮЧЕН!
     constexpr uint8_t LORA_DIO0  = 4;  // Прерывание приема пакета
     constexpr uint8_t LORA_DIO1  = 14; // Прерывание таймаута
 
@@ -292,14 +240,24 @@ namespace Config {
                        
     // ⚡ Моторы через LEDC (аппаратный ШИМ)
     // 🔑 Проверка: пины 40,41 поддерживают LEDC на ESP32-S3
-    constexpr uint8_t MOTOR_PIN_1 = 40;
-    constexpr uint8_t MOTOR_PIN_2 = 41;
-    constexpr uint8_t motorPins[2] = {40, 41};
+    constexpr uint8_t MOTOR_PIN_1 = 16 ;
+    constexpr uint8_t MOTOR_PIN_2 = 21 ;
+    constexpr uint8_t motorPins[2] = {16, 21 };
     constexpr ledc_channel_t motorChannels[2] = {LEDC_CHANNEL_1, LEDC_CHANNEL_2};
 
+    // ============================================================================
+    // 🔗 UART2 ДЛЯ RPi Zero 2W + АППАРАТНЫЙ FLOW CONTROL
+    // ============================================================================
+    // 🔑 RTS/CTS подключены к GPIO 2 и GPIO 3. 
+    // ⚠️ Примечание: GPIO 2 больше не используется для LED_STATUS (переназначен на RTS)
+    constexpr uint8_t UART_RPI_TX  = 5;   ///< ESP32 TX → RPi RX
+    constexpr uint8_t UART_RPI_RX  = 6;   ///< ESP32 RX ← RPi TX
+    constexpr uint8_t UART_RPI_RTS = 1;  ///< 🔑 ESP32 Output → RPi CTS (готовность принять)
+    constexpr uint8_t UART_RPI_CTS = 3;   ///< 🔑 RPi Output → ESP32 CTS (готовность принять)
+
     // --- Мониторинг Батареи (ADC) ---
-    // GPIO 7 = ADC1_CH6. Поддерживает калибровку (Line Fitting).
     // Безопасный пин, не конфликтует с USB (19/20) и Flash/PSRAM.
+    // GPIO 7 = ADC1_CH6. Поддерживает калибровку (Line Fitting).
     constexpr uint8_t BATTERY_ADC_PIN = 7;
 
     // --- GPS (UART) ---
@@ -307,9 +265,9 @@ namespace Config {
     constexpr uint8_t GPS_TX = 17; // Передача данных GPS
 
     // --- Периферия ---
-    constexpr uint8_t BUZZER_PIN = 16;
-    constexpr uint8_t LED_STATUS = 2; // Встроенный LED
-
+    constexpr uint8_t BUZZER_PIN = 255;   // ⛔ Отключен по запросу (освобождает ресурсы)
+    // constexpr uint8_t LED_STATUS = 2; // Встроенный LED
+    constexpr uint8_t LED_STATUS = 2; // Встроенный LED //
     // ============================================================================
     // 🔗 UART ШИНА ДЛЯ RASPBERRY PI ZERO 2W (UART2)
     // ============================================================================
@@ -325,10 +283,11 @@ namespace Config {
     *   • Скорость: 921600 бод. Без Flow Control при такой скорости возможны потери пакетов.
     * @note GPIO 5 и 6 безопасны на ESP32-S3-WROOM-1, не конфликтуют с Flash/PSRAM/USB.
     */
-    constexpr uint8_t UART_RPI_TX  = 5;  ///< ESP32-S3 TX → RPi RX
-    constexpr uint8_t UART_RPI_RX  = 6;  ///< ESP32-S3 RX ← RPi TX
-    constexpr uint8_t UART_RPI_RTS = 3;  ///< Ready To Send (ESP32)
-    constexpr uint8_t UART_RPI_CTS = 42; ///< Clear To Send (RPi)    
+            //        constexpr uint8_t UART_RPI_TX  = 5;  ///< ESP32-S3 TX → RPi RX
+            //        constexpr uint8_t UART_RPI_RX  = 6;  ///< ESP32-S3 RX ← RPi TX
+            //        constexpr uint8_t UART_RPI_RTS = 3;  ///< Ready To Send (ESP32)
+            //        constexpr uint8_t UART_RPI_CTS = 42; ///< Clear To Send (RPi)    
+
     // Опционально: аппаратный flow control (раскомментировать при высоких нагрузках)
     // constexpr uint8_t UART_RPI_RTS = 3;  ///< Ready To Send (ESP32)
     // constexpr uint8_t UART_RPI_CTS = 42; ///< Clear To Send (RPi)
